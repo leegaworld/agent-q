@@ -207,6 +207,7 @@ async def run_tests(
     test_results_id = create_test_results_id(test_results_id, test_file)
     results_dir = create_results_dir(test_file, test_results_id)
 
+    await orchestrator.start()
     page = await orchestrator.playwright_manager.get_current_page()
     test_results = []
     max_task_index = len(test_configurations) if not max_task_index else max_task_index

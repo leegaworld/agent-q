@@ -6,12 +6,30 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+import sys
+
 from dotenv import load_dotenv
 from nltk.tokenize import word_tokenize  # type: ignore
 from openai import OpenAI
 
 load_dotenv()
-client = OpenAI()
+
+# Ollama client
+ollama_host = os.getenv("OLLAMA_API_HOST")
+if not ollama_host:
+    print("OLLAMA_API_HOST environment variable not set.")
+    sys.exit(1)
+
+model_name = os.getenv("MODEL_NAME", "qwen3-vl:8b")  # Default model
+
+try:
+    client = OpenAI(
+        base_url=f"{ollama_host}/v1",
+        api_key="ollama",  # Required but not used by Ollama
+    )
+except Exception as e:
+    print(f"Failed to connect to Ollama at {ollama_host}: {e}")
+    sys.exit(1)
 
 
 def llm_fuzzy_match(pred: str, reference: str, question: str) -> float:
@@ -42,7 +60,7 @@ def llm_fuzzy_match(pred: str, reference: str, question: str) -> float:
     ]
 
     response = generate_from_openai_chat_completion(
-        model="gpt-4-turbo-preview",
+        model=model_name,
         messages=messages,
         temperature=0,
         max_tokens=768,
@@ -90,7 +108,7 @@ def llm_ua_match(pred: str, reference: str, question: str) -> float:
     ]
 
     response = generate_from_openai_chat_completion(
-        model="gpt-4-turbo-preview",
+        model=model_name,
         messages=messages,
         temperature=0,
         max_tokens=768,
@@ -134,13 +152,6 @@ def generate_from_openai_chat_completion(
     Raises:
         ValueError: If the 'OPENAI_API_KEY' environment variable is not set.
     """
-    if "OPENAI_API_KEY" not in os.environ:
-        raise ValueError(
-            "OPENAI_API_KEY environment variable must be set when using OpenAI API."
-        )
-    client.api_key = os.environ["OPENAI_API_KEY"]
-    client.organization = os.environ.get("OPENAI_ORGANIZATION", "")
-
     response = client.chat.completions.create(
         model=model,
         messages=messages,  # type: ignore

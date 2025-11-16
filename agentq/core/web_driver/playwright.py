@@ -179,7 +179,7 @@ class PlaywrightManager:
                 )
                 PlaywrightManager._browser_context = await PlaywrightManager._playwright.chromium.launch_persistent_context(
                     new_user_dir,
-                    channel="chrome",
+                    channel="chromium",
                     headless=self.isheadless,
                     args=[
                         "--disable-blink-features=AutomationControlled",
@@ -215,7 +215,7 @@ class PlaywrightManager:
                 )
                 PlaywrightManager._browser_context = await PlaywrightManager._playwright.chromium.launch_persistent_context(
                     new_user_dir,
-                    channel="chrome",
+                    channel="chromium",
                     headless=self.isheadless,
                     args=[
                         "--disable-blink-features=AutomationControlled",
