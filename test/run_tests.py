@@ -1,9 +1,17 @@
 import argparse
 import asyncio
 
+from agentq.core.agent.agentq import AgentQ
+from agentq.core.agent.agentq_actor import AgentQActor
+from agentq.core.agent.agentq_critic import AgentQCritic
+from agentq.core.agent.browser_nav_agent import BrowserNavAgent
+from agentq.core.agent.planner_agent import PlannerAgent
+from agentq.core.models.models import State
+from agentq.core.orchestrator.orchestrator import Orchestrator
 from test.tests_processor import run_tests
 
-if __name__ == "__main__":
+
+async def main():
     # Create the parser
     parser = argparse.ArgumentParser(
         description="Run test suite for specified range of test tasks."
@@ -54,15 +62,27 @@ if __name__ == "__main__":
     # Parse the command line arguments
     args = parser.parse_args()
 
-    # Run the main function with the provided or default arguments, not passing browser_manager or AutoGenWrapper will cause the test processor to create new instances of them
-    asyncio.run(
-        run_tests(
-            orchestrator=None,
-            min_task_index=args.min_task_index,
-            max_task_index=args.max_task_index,
-            test_file=args.test_config_file,
-            test_results_id=args.test_results_id,
-            wait_time_non_headless=args.wait_time_non_headless,
-            take_screenshots=args.take_screenshots,
-        )
+    state_to_agent_map = {
+        State.PLAN: PlannerAgent(),
+        State.BROWSE: BrowserNavAgent(),
+        State.AGENTQ_BASE: AgentQ(),
+        State.AGENTQ_ACTOR: AgentQActor(),
+        State.AGENTQ_CRITIC: AgentQCritic(),
+    }
+    orchestrator = Orchestrator(state_to_agent_map=state_to_agent_map, eval_mode=True)
+
+    # Run the main function with the provided or default arguments
+    await run_tests(
+        orchestrator=orchestrator,
+        min_task_index=args.min_task_index,
+        max_task_index=args.max_task_index,
+        test_file=args.test_config_file,
+        test_results_id=args.test_results_id,
+        wait_time_non_headless=args.wait_time_non_headless,
+        take_screenshots=args.take_screenshots,
     )
+    await orchestrator.shutdown()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

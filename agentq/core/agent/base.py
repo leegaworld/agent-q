@@ -1,17 +1,20 @@
 import json
 import os
+import sys
 from typing import Callable, List, Optional, Tuple, Type
 
 import instructor
-import instructor.patch
 import litellm
 import openai
+from dotenv import load_dotenv
 from instructor import Mode
 from langsmith import traceable
 from pydantic import BaseModel
 
 from agentq.utils.function_utils import get_function_schema
 from agentq.utils.logger import logger
+
+load_dotenv()
 
 
 class BaseAgent:
@@ -23,7 +26,6 @@ class BaseAgent:
         output_format: Type[BaseModel],
         tools: Optional[List[Tuple[Callable, str]]] = None,
         keep_message_history: bool = True,
-        client: str = "openai",
     ):
         # Metdata
         self.agent_name = name
@@ -44,16 +46,23 @@ class BaseAgent:
         litellm.logging = True
         litellm.set_verbose = True
 
-        # Llm client
-        if client == "openai":
-            self.client = openai.Client()
-        elif client == "together":
-            self.client = openai.OpenAI(
-                base_url="https://api.together.xyz/v1",
-                api_key=os.environ["TOGETHER_API_KEY"],
-            )
+        # Ollama client
+        ollama_host = os.getenv("OLLAMA_API_HOST")
+        if not ollama_host:
+            logger.error("OLLAMA_API_HOST environment variable not set.")
+            sys.exit(1)
 
-        self.client = instructor.from_openai(self.client, mode=Mode.JSON)
+        self.model_name = os.getenv("MODEL_NAME", "qwen3-vl:8b")  # Default model
+
+        try:
+            self.client = openai.OpenAI(
+                base_url=f"{ollama_host}/v1",
+                api_key="ollama",  # Required but not used by Ollama
+            )
+            self.client = instructor.from_openai(self.client, mode=Mode.JSON)
+        except Exception as e:
+            logger.error(f"Failed to connect to Ollama at {ollama_host}: {e}")
+            sys.exit(1)
 
         # Tools
         self.tools_list = []
@@ -75,8 +84,6 @@ class BaseAgent:
         input_data: BaseModel,
         screenshot: str = None,
         session_id: str = None,
-        # model: str = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-        model: str = "gpt-4o-2024-08-06",
     ) -> BaseModel:
         if not isinstance(input_data, self.input_format):
             raise ValueError(f"Input data must be of type {self.input_format.__name__}")
@@ -125,28 +132,25 @@ class BaseAgent:
 
         # TODO: add a max_turn here to prevent a inifinite fallout
         while True:
-            # TODO:
-            # 1. exeception handling while calling the client
-            # 2. remove the else block as JSON mode in instrutor won't allow us to pass in tools.
-            if len(self.tools_list) == 0:
-                response = self.client.chat.completions.create(
-                    model=model,
-                    # model="gpt-4o-2024-08-06",
-                    # model="gpt-4o-mini",
-                    # model="groq/llama3-groq-70b-8192-tool-use-preview",
-                    # model="xlam-1b-fc-r",
-                    messages=self.messages,
-                    response_model=self.output_format,
-                    max_retries=4,
-                )
-            else:
-                response = self.client.chat.completions.create(
-                    model=model,
-                    messages=self.messages,
-                    response_model=self.output_format,
-                    tool_choice="auto",
-                    tools=self.tools_list,
-                )
+            try:
+                if len(self.tools_list) == 0:
+                    response = self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=self.messages,
+                        response_model=self.output_format,
+                        max_retries=4,
+                    )
+                else:
+                    response = self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=self.messages,
+                        response_model=self.output_format,
+                        tool_choice="auto",
+                        tools=self.tools_list,
+                    )
+            except Exception as e:
+                logger.error(f"Error calling Ollama API: {e}")
+                sys.exit(1)
 
             # instructor directly outputs response.choices[0].message. so we will do response_message = response
             # response_message = response.choices[0].message
